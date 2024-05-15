@@ -1,0 +1,218 @@
+---
+title: "Control t-test"
+subtitle: "Word count: 2052"
+author: "1928613"
+numbersections: true
+toc: false
+bibliography: bib-library.bib
+csl: elsevier-harvard.csl
+output: 
+  bookdown::pdf_document2: default
+  bookdown::word_document2: default
+---
+
+```{r setup, include=FALSE}
+library(DescTools)
+library(car)
+library(multcomp)
+data('InsectSprays')
+data('airquality')
+knitr::opts_chunk$set(fig.align = 'center')
+```
+
+# Learning objectives
+
+In this lecture, you will fist be able to understand the concept of control t-test and how to use it, or in other words, when do you need to use the control t-test. Then, you will learn to apply it on R studio, and try to interpret the return result. Further more, you can comprehend how to choose the method in different backgrounds, especially in abnormal distribution or variance homogeneity it not proved.
+
+# Definition and usage
+
+## Definition
+Control t-test is a kind of post-hoc test. After doing ANOVA, if the p-value is less than the significant level that was selected, we can reject the null hypothesis, in the other words, we have abundance adequate evidence to say that there is at least one group have different means with other groups. Thus the next step is compare each two group to find the difference, control t-test is a marvelous method that can be applied to this situation. The word 'control' in the title means this method will set a control group first, and then compare the control group with other groups to find which groups have significant difference with the control group.
+
+## Usage
+In the definition, the purpose of the control t-test is to find out the specific level of difference between the two groups. However, in real life, the selection object of the control group is often the most common experimental group with relatively few variables, or the special group that the experimenter wants to compare. For example, people hope to compare the purification effects of several new reagents on industrial wastewater. If a group of sewage not applicable to any reagent or sewage using the older generation reagent is used as the control group, and the differences between other groups and the control group are compared, the results reflect whether other reagents have the effect of purifying sewage. If there is a significant difference and the index of sewage decreases, it indicates that the new reagent has played a role, which is helpful to purify sewage and protect the environment.
+
+## Basic Assumptions
+Before using ANOVA, there must have at least two assumptions[@ruxton2008time]: Fist, the sample should be in normal distribution. Second, the variance in each sample should be the same. On the premise of normal distribution, it can be determined that the difference between the two groups of samples is caused by mean and variance. Ensuring the homogeneity of variance further ensures that the difference between sample groups is caused by the difference of mean value. After doing ANOVA, we will have a basic result that whether at least one group's mean is different from any of the other groups from compare the p-value with the significant level. When these two hypotheses are not tenable, nonparametric tests (described later) are required.
+
+## Why ANOVA
+Why use ANOVA but not directly use t-test to compare the differences between each two groups. The most important reason is that the direct use of t-test to compare more than two groups of quantitative data will greatly increase the probability of the first type of error[@brown2008bonferroni]. We set the significance level of t-test as $\alpha$= 0.05, then the probability of making the first type of error in each pairwise t-test is $\alpha$= 0.05, the probability of not making mistakes is 0.95, which seems very low. However, when the number of samples is increased to 3, the calculation formula will be 0.95\^3, therefore, under the three comparisons, the probability of not making a kind of error is about 0.86, while the probability of making an error is about 0.14, which is obviously greater than the maximum significance level acceptable for the test. Further, when the number of samples increases to 5, the number of pairwise comparisons is 10, and the probability of the first type of error is 0.95 \^ 10, which is about 0.6. In other words, when we make 10 comparisons, we can believe that the number of results is only slightly higher than half, so the comparison of multiple samples is not suitable for direct use of t-test.
+
+## Two application conditions of control t-test
+When we make a basic judgment on the data, there will be two situations: the first is that the sample data follows the normal distribution and the variance is homogeneous; The second case indicates that the data does not follow the normal distribution and the variance is not homogeneous. When the data follow the normal distribution and the variance is homogeneous,we need to use parameter test method. We use t-test to test the two groups of data, or use ANOVA to compare multiple groups of data. If there is significant difference, Dunnet t-test is used to compare data with the same sample size, while Bonferroni correction can be used to compare data with different sample sizes. In the case of non normal distribution or uneven variance, nonparametric methods need to be used. Welch test should replace ANOVA to test whether there is a significant difference in the mean value between groups[@hilton2006statnote]. Game Howell test was used instead of Dunnet test or Bonferroni test to compare the differences between the two sample groups[@hilton2006statnote].The flow chart is made according to these paths to facilitate the judgment of the methods to be used in different situations(Appendix 1)
+
+### Bonferroni correction
+Bonferroni correction is a very simple but effective method to adjust the threshold p-value to In the Mathematical formula,control the first type error. $$
+P_{b}=P/k
+$$ Pb presents the corrected threshold, and k is the number of comparisons[@holland1987improved]. in this way, when there is 5 comparisons, the Error rate will be 1-(1-0.01)\^5=0.049, which is very close to the significant level, thus the Bonferroni correction make a well performance in ensuring the confidence to reject a null hypothesis.
+
+### Dunnet t-test
+Another method for performing control t-test is Dunnett's test, which use Dunnett's critical value to limit the largest difference among groups[@koenig2008adaptive]. 
+$$
+Dunnet's \:critical\:value=t_{D}\times\sqrt{2\times MS_{E}/n}
+$$ 
+$t_{D}$ can be found in Dunnett's Table(ZACH,2020) (Appendix 2), through a significant level, the number of groups, and the sample size. $MS_{E}$ is an abbreviation of Mean square error, it is the expected value of the square of the difference between the estimated value of the parameter and the true value of the parameter.
+
+# Case study 1
+To investigate New York's air quality from May to September, the researchers recorded four consecutive indicators: ozone concentration (Roosevelt Island, unit: ppb), solar radiation frequency (Central Park, unit: angstrom), wind speed (LaGuardia Airport, unit: MPH) and temperature (LaGuardia Airport, Fahrenheit and Celsius). Finally, the data are summarized and processed[@chambers1983graphical].
+
+## Scientific question
+Compared with may, which months in New York state have obvious differences in wind speed from May.
+
+## Procedure
+
+First, import data and visualize the data
+
+```{r}
+data("airquality")
+data2=airquality
+data2$Month<-as.factor(data2$Month)
+boxplot(data2$Wind~data2$Month)
+
+```
+
+From the box diagram, we find that the wind speed is relatively similar in several months, and the wind speed is the highest in May, but this does not allow us to determine whether the difference between them is significant, so we need to carry out the next analysis. Firstly, we test the normality of the data and the homogeneity of variance to ensure the accuracy of the results after data analysis.
+
+```{r}
+shapiro.test(data2$Wind)
+#library(car) it contains the leveneTest function
+leveneTest(Wind~Month,data=data2)
+```
+
+The p value obtained by normality test is 0.1178 \> 0.05, so it can explain the normal distribution of the data. The p value obtained by variance homogeneity test is 0.9467 \> 0.05, so it can be explained that the variance is homogeneous. On this basis, ANOVA can be selected for analysis of variance.
+
+```{r}
+mod<-aov(Wind~Month,data=data2) 
+summary(mod)
+```
+
+The p value obtained from ANOVA is 0.00879 \< 0.05, so we are confident that there are significant differences between these sample groups, that is, the wind speed in New York state is not equal in each month.Under the previous conditions, we finally chose Dunnet test to make pairwise comparison between the control group and other groups.
+
+```{r}
+#library(DescTools) it contains the DunnettTest function
+DunnettTest(x=data2$Wind,g=data2$Month)
+```
+
+## Results
+
+Finally, compared with the data in May, there is no significant difference between June (P = 0.3424 \> 0.05) and September (P = 0.2891 \> 0.05) and may. However, the difference between July and may is significant (P = 0.0086 \< 0.05), and there is also a significant difference between August and may (P = 0.0051 \< 0.05).
+
+## Conclusion
+
+Compared with the wind speed in May, the wind speed in June and September in New York state did not change significantly. However, the wind speed in August and September is more obvious than that in May. Combined with the box diagram, it can be seen that the wind speed in August and September can be said to have decreased significantly. These data can provide better help for human production and life. 
+
+# Case study 2
+In Environmental Science, crops or vegetation in a region are often destroyed by pests. Therefore, the prevention and control of regional diseases and pests has become an important factor to protect a regional environment. For example, China took diseases and pests as an important indicator of the forest evaluation system in 1992[@jun2005ecological]. A group of experimenters studied the effects of different pesticides on insects in agricultural experimental units, and made statistics on the results[@beall1942transformation]. A total of six insecticides were used in the experiment. The same kind of insects were killed in the same experimental environment. Finally, the surviving insects were recorded. 
+
+## Scientific question 
+Among these six insecticides, compared with type A insecticides, which insecticides have similar effects to type A insecticides and which insecticides have obvious differences in the effects on insects. Is the effect better or worse than type A insecticides? If it is better than type A insecticides, is it more conducive to killing insects in the natural environment to protect vegetation and farmers?
+
+## Procedure
+
+First, import the data and conduct basic analysis on the data.
+
+```{r}
+data('InsectSprays')
+k1<-InsectSprays
+k1$spray<-factor(k1$spray,ordered=T)
+tapply(k1$count,k1$spray,mean)
+summary(k1)
+```
+
+It can be found from the results that the number of surviving insects in group A, B and F is relatively close, while the number of surviving insects in group C,D,E is much less than that in the first three groups.So can we say that the effects of A,B,F three insecticides are the same? This requires further testing. Firstly, we test the normality and homogeneity of variance of sample data.
+
+```{r}
+shapiro.test(k1$count)
+leveneTest(count~spray,data=k1)
+```
+
+Through the test of variance and normal distribution, we find that the p-value in Shapiro-wilk normality test is 0.0002525\<0.05, and the p-value in Levene's Test for Homogeneity of Variance is 0.004223\<0.05, they proves that this data set is not normally distributed, and the variance is not homogeneity, so we need to change our methods to find the significant difference.
+
+```{r}
+oneway.test(count~spray,k1,var.equal = F)
+```
+
+Through the Welch's test, we can determine that there are significant differences in the number of insects under the influence of different insecticides in each group by comparing P-value=7.999e-12 \< 0.05.So what are the groups causing the difference? This requires the use of games-Howell test.
+
+```{r}
+# Tukey 
+# Games-Howell 
+tukey <- function(  data,                   
+                   group,                   
+                   method=c("Tukey", "Games-Howell"))   
+{
+  OK <- complete.cases(data, group)         
+  data <- data[OK]
+  group <- factor(group[OK])
+  n <- tapply(data, group, length)          
+  a <- length(n)                        
+  phi.e <- sum(n)-a                 
+  Mean <- tapply(data, group, mean)         
+  Variance <- tapply(data, group, var)      
+  result1 <- cbind(n, Mean, Variance)           
+  rownames(result1) <- paste("Group", 1:a, sep="")
+  method <- match.arg(method)
+  if (method == "Tukey") {              
+    v.e <- sum((n-1)*Variance)/phi.e        
+    t <- combn(a, 2, function(ij)           
+      abs(diff(Mean[ij]))/sqrt(v.e*sum(1/n[ij])) )
+    p <- ptukey(t*sqrt(2), a, phi.e, lower.tail=FALSE)  
+    Tukey <- cbind(t, p)                
+    rownames(Tukey) <- combn(a, 2, paste, collapse=":")
+    return(list(result1=result1, Tukey=Tukey, phi=phi.e, v=v.e))
+  }
+  else {                            
+    t.df <- combn(a, 2, function(ij) {      
+      t <- abs(diff(Mean[ij]))/sqrt(sum(Variance[ij]/n[ij]))
+      df <- sum(Variance[ij]/n[ij])^2/sum((Variance[ij]/n[ij])^2/(n[ij]-1))
+      return(c(t, df))} )
+    t <- t.df[1,]
+    df <- t.df[2,]
+    p <- ptukey(t*sqrt(2), a, df, lower.tail=FALSE) 
+    Games.Howell <- cbind(t, df, p)         
+    rownames(Games.Howell) <- combn(a, 2, paste, collapse=":")
+    return(list(result1=result1, Games.Howell=Games.Howell))
+  }
+}
+tukey(k1$count,k1$spray,method=c('Tukey',"Games-Howell"))
+```
+
+## Results
+
+Finally, through the Games-Howell test, we can compare the differences between each two groups through the p value. As we set the Group A as control group, we can find it has significant difference with group C(p=1.075055e-09\<0.05),D(1.442013e-06\<0.05) and E(4.086244e-08\<0.05), but has not significant difference with group B(7.542147e-01\>0.05) and group F(7.542147e-01\>0.05).
+
+## Conclusion
+
+It can be concluded that insecticide A,B,F has similar effects on insects, but insecticide C,D,E has better effects than insecticide A,B,F.Therefore, it can be said that when encountering diseases and pests, the use of C, D or e insecticides can more effectively kill vegetation or diseases and pests in crops. However, it can not be directly determined that these types of insecticides are the most suitable. Therefore, it is also necessary to study whether insecticides have destructive effects on vegetation and water sources. Based on these, we can finally determine the most suitable type of insecticides, which can also be used as the object of future research.
+
+# Exercises
+
+## Exercises 1
+
+Sunlight is the main radiation of the earth. According to the research, the sun can affect the earth's climate system[@nazari2020relationship]. Sunspots are one of the important solar activities. Studying the number of sunspots is helpful to analyze the earth's climate. Therefore, researchers counted the changes of sunspots between 1749 and 1983[@andrews2012data]. If we take each decade as a cycle, is there any significant change in the average number of sunspots in each subsequent decade compared with the first decade?
+
+```{r}
+data("sunspots")
+```
+
+## Exercise 2
+
+This famous (Fisher or Anderson's) iris data set gives four indicators of three Iris species[@becker1988new]: bristly iris, variegated iris and Virginia iris, that is, the measurement of sepal length and sepal width, and petal length and petal width, in centimeters. The whole data set has 150 rows and 5 columns. So are there significant differences between the four measurements of the three Iris species?
+
+```{r}
+data('iris')
+```
+
+# Appendix
+
+## 1.Flow Chart
+
+![](images/test-01.PNG)
+
+## 2.Dunnett's table
+
+![](images/table-01.PNG){width="418"}
+
+# References
+
+ZACH, Dunnett's table. *Statology*. Available at: <https://www.statology.org/dunnetts-table/> [Accessed May 8, 2022].

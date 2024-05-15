@@ -1,0 +1,115 @@
+rule all:
+	input:
+		'results/sample_pearson_heatmap.png',
+		expand('results/{sample}_{rep}_flagstats.txt',sample=['INP','RUNX1'],rep=['rep1','rep2']),
+		expand('results/{sample}_{rep}.sorted.bam.bai',sample=['INP','RUNX1'],rep=['rep1','rep2']),
+		'results/multiqc_report.html'
+
+rule bowtie2_align:
+	input:
+		'results/{sample}_{rep}.trimmed.fastq.gz',
+	output:
+		'results/{sample}_{rep}.bam'
+	threads: 16
+	params:
+		'results/index_whole/GRCh38'
+	conda:
+		'envs/bowtie2_env.yml'
+	shell:
+		'''
+		bowtie2 -x {params} -U {input}  -p {threads} | samtools view -Sb > {output}
+		'''
+
+rule samtools_sort:
+	input:
+		'results/{sample}_{rep}.bam'
+	output:
+		'results/{sample}_{rep}.sorted.bam'
+	conda:
+		'envs/samtools_env.yml'
+	shell:
+		'''
+		samtools sort {input} -o {output}
+		'''
+
+
+rule samtools_idx:
+	input:
+		'results/{sample}_{rep}.sorted.bam'
+	output:
+		'results/{sample}_{rep}.sorted.bam.bai'
+	conda:
+		'envs/samtools_env.yml'
+	shell:
+		'''
+		samtools index {input}
+		'''
+
+rule samtools_flagstats:
+	input:
+		'results/{sample}_{rep}.sorted.bam'
+	output:
+		'results/{sample}_{rep}_flagstats.txt'
+	conda:
+		'envs/samtools_env.yml'
+	shell:
+		'''
+		samtools flagstat {input} > {output}
+		'''
+
+
+
+rule multiqc:
+	input:
+		expand('results/{sample}_{rep}_flagstats.txt', sample=['INP','RUNX1'],rep=['rep1', 'rep2'])
+	output:
+		'results/multiqc_report.html'
+	params:
+		'results/'
+	conda:
+		'envs/multiqc_env.yml'
+	shell:
+		'''
+		multiqc {params} -o {params} -f 
+		'''
+
+rule bamCoverage:
+	input:
+		bam='results/{sample}_{rep}.sorted.bam',
+		bai='results/{sample}_{rep}.sorted.bam.bai'
+	output:
+		'results/{sample}_{rep}.sorted.bam.bw'
+	threads: 4
+	conda:
+		'envs/deeptools_env.yml'
+	shell:
+		'''
+		bamCoverage -b {input.bam} -o {output}
+		'''
+
+rule multiBwSummary:
+	input:
+		expand('results/{sample}_{rep}.sorted.bam.bw',sample=['INP','RUNX1'],rep=['rep1','rep2'])
+	output:
+		'results/sample_bw_summary.npz'
+	conda:
+		'envs/deeptools_env.yml'
+	shell:
+		'''
+		multiBigwigSummary bins -b {input} -o {output}
+		'''
+rule plotCorrelation:
+	input:
+		'results/sample_bw_summary.npz'
+	output:
+		'results/sample_pearson_heatmap.png'
+	params:
+		method='pearson',
+		plot_type='heatmap'
+	conda:
+		'envs/deeptools_env.yml'
+	shell:
+		'''
+		plotCorrelation -in {input}  -c {params.method} -p {params.plot_type} -o {output}
+		'''
+

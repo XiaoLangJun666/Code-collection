@@ -1,0 +1,151 @@
+---
+title: "**Factors affecting the murder rate in the United States**"
+author: "1928613"
+subtitle: "word count: 1033"
+bibliography: bib-library.bib
+csl: elsevier-harvard.csl
+output: 
+     pdf_document : default
+---
+
+```{r assesment, include=FALSE}
+library(car)
+library(leaps)
+library(faraway)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# ***Introduction***
+
+Violent shootings in the United States are well known. However, the bill banning the sale of firearms has been delayed. Obviously, the proliferation of guns is one of the reasons for the high crime rate in all States of the United States, there are over 31000 firearm deaths in the United States in 2010, which became the highest cause of death for men under 40[@miller2013firearms].Although Setting up laws to ban gun trafficking can greatly reduce the murder rate, but it seems very difficult to achieve at present.Therefore, predicting the city's crime rate through the characteristics of some cities, such as population, average education level and average income, helps to improve a city's control over the crime rate. Therefore, through the state dataset from Rstudio, We obtained murder rate data from 50 states in the United States, as well as other factors (population, per capital income, average illiteracy rate of the population, life expectancy, percentage of people who graduated from high school, average number of days in a year when the average temperature is less than 0 degrees, and land area in square miles)[@becker1988new].This is a data table with 50 rows and 8 columns. It can be observed that all factors are continuous variables. Therefore, we can establish a regression model of regional murder rate and other factors through multiple linear regression.
+
+# ***Data analysis***
+
+```{r echo=FALSE,result="hide"}
+data1<-data.frame(state.x77)
+data1<-data1[,-4]
+data1<-data1[,-5]
+data1<-data1[,-6]
+```
+
+First, We make a preliminary observation on the data set and make a scatter diagram for a single factor. ![](1.png){width="308"}![](2.png){width="308"}
+
+From the above figure, we can observe that the illiteracy rate of the population is slightly positively correlated with the murder rate, but the mean the average number of days when the annual average temperature is lower than 0 ℃ is slightly negatively correlated with the murder rate.Then we performed linear regression on all factors.The regression coefficient table should confirm the prediction of image observation. The former has the highest negative correlation value of -0.54 and the latter has the highest positive correlation value of 0.70
+
+```{r echo=FALSE}
+round(cor(data1),2)
+```
+
+After summarizing the regression model, we found that although the p value of the overall model is not significant, only the illiteracy rate is significant. Therefore, we cannot believe in a linear regression model composed of all factors. We need to analyze the data and reconstruct the model.
+
+```{r echo=FALSE}
+Murder_lm<-lm(Murder~.,data=data1)
+summary(Murder_lm)
+confint(Murder_lm)
+```
+
+### -Independence test
+
+If the error term is not independent, there will be no theoretical basis for the estimation of error term and hypothesis test. Therefore, we introduce Durbin-Watson test to judge the independence. DW is close to 0, indicating that there is a positive correlation in the residual. If DW is close to 4, it is a negative correlation. If DW is close to 2, it indicates that the residuals are independent[@tillman1975power]. 
+$$
+DW=\sum_n^2(e_{i}-e_{i-1})^{2}/ESS
+$$
+
+```{r echo=FALSE}
+durbinWatsonTest(Murder_lm)
+```
+
+We can see that the DW value is close to 2, that is, the residuals are independent of each other, and then we will carry out global regression.
+
+### - Collinearity diagnostics
+
+Variance expansion factor (VIF) is a closely related statistic of diagnostic collinearity in multiple regression[@miles2014tolerance]. If Vif \> 5, it indicates that there is obvious correlation between variables, which will seriously affect the regression model. They are based on R square value, which is obtained by regressing the predicted value with all other predicted values in the analysis. 
+$$
+VIF(\beta_{j})=\frac{1}{1-R_{j}^{2}}
+$$
+
+```{r echo=FALSE}
+data_murder<-data1[,-4]
+vif(data_murder)
+```
+
+By solving the Vif function, the Vif values of the four factors are less than 5. Therefore, we can say that the four variables are not collinear and independent of each other, so we can further establish the regression model.
+
+### - Global Regression
+
+Traverse the possibility of all factor combinations, and calculate the PC value, adjr2 value, and BIC value of each combination.The determination coefficient R-squared explains the extent to which the regression model can explain the differences, while adjr2 can avoid over fitting.BIC increases with the increase of model complexity, so we choose a small BIC value to reduce the complexity of the model.Comparing the four data tables, we found that the regression model formed by the two factors of crime rate and population,illiteracy rate, has the highest adjr2 value and the lowest BIC value. Therefore, we can deduce that the regression model formed by these two factors is the best. 
+$$
+R_{adj}^2=1-\frac{SS_{res}/(n-k)}{SS_{T}{/(n-1)}}
+$$
+
+```{r echo=FALSE}
+ss<-regsubsets(Murder~.,data=data1,nbest=6)
+summary(ss)
+summary(ss)$cp
+summary(ss)$adjr2
+summary(ss)$BIC
+```
+
+AIC value is a monotonic function of the sum of squares of residuals. With the increase of the number of independent variables, the sum of squares of residuals decreases and the goodness of fit of the model becomes better[@kuha2004aic]. Therefore, the goodness of fit of the model is further verified by manually calculating the values of AIC and BIC. 
+$$
+AIC=n\times\ln(\frac{SSE}{n})+2\times(p+1)
+$$ 
+$$
+BIC=n\times\ln(\frac{SSE}{n})+\ln(n)\times(p+1)
+$$
+
+```{r echo=FALSE}
+n<-nrow(data1)
+p<-c(rep(1,4),rep(2,6),rep(3,4),rep(4,1))
+AIC<-n*log(summary(ss)$rss/n)+2*(p+1)
+BIC<-n*log(summary(ss)$rss/n)+log(n)*p+1
+min(AIC)
+min(BIC)
+lm<-lm(Murder~Population+Illiteracy,data=data1)
+summary(lm)
+```
+
+The model with the minimum AIC value and BIC value is completely consistent with the previous model, so we can determine that it is the optimal multiple regression model.
+
+### - Stepwise Regression
+
+```{r echo=FALSE}
+selection<-step(Murder_lm)
+summary(selection)
+anova(lm,Murder_lm)
+```
+
+The global regression method is difficult to fully expand the regression model with multiple factors, so you can borrow the step package to model step by step.By comparing the AIC values after adding and deleting factors, we can judge the importance of deleted factors to the model. After regression, we can get a regression model which is the same as the global regression, with a R-squared value of 0.5668 and an overall p value of 2.893e-09, which is more significant.
+
+### - Regression diagnosis
+
+```{r echo=FALSE}
+par(mfrow=c(2,2))
+plot(lm)
+```
+
+From Q-Q plot, it shows that most state follow the standard distribution, but the Nevada state is quite away from the theoretical value distribution line, if we delete the outlier, the regressio model will become here.
+
+```{r echo=FALSE}
+data2<-data1[-28,]
+update<-lm(Murder~.,data=data2)
+bt<-step(update)
+summary(bt)
+```
+
+Through the analysis, we can know that although the overall R-squared value has increased, the p value of each factor has changed, and the intercept p value has increased, which becomes insignificant, but on the whole, the model is more optimized after deleting outlier points.From the p value, it can be found that the illiteracy rate has the most significant impact on the murder rate in a region, far exceeding the impact of population on the murder rate in a region.
+
+# ***Conclusion***
+
+Finally, two significant factors were selected, the population of the region and the illiteracy rate of the region (the proportion of the population graduating from middle and high schools in the region). The regression model is:
+
+```{r echo=FALSE}
+coef(bt)
+```
+
+$$
+Y=1.052+0.00025X_{1}+4.359X_{2}
+$$
+Therefore, improving people's education level will help to greatly reduce the murder rate in cities, and an appropriate reduction in the population of a city will also help to reduce the murder rate.
+
+# ***Reference***

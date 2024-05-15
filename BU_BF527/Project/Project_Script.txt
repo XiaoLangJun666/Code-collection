@@ -1,0 +1,236 @@
+library(dplyr)
+library(Seurat)
+library(patchwork)
+library(ggplot2)
+
+
+dir.10x.1 = 'data/Chow_filtered_feature_bc_matrix'
+endo.data.1 <- Read10X(data.dir = dir.10x.1)
+merged_seurat <- CreateSeuratObject(counts = endo.data.1, project = 'endo3k_1', min.cells = 5, min.features = 200)
+
+# ###############################################################################
+#Quility control
+#filter the cell has high level of mitochondria gene
+#filter the cell has too much expression level
+#filter the cell has too low expression level
+#normalize the gene 
+# ###############################################################################
+
+#Calculate the mitochondria gene percentage
+merged_seurat[["percent.mt"]] <- PercentageFeatureSet(merged_seurat, pattern = '^mt-')
+
+#Watch the result
+head(merged_seurat@meta.data, 5)
+VlnPlot(merged_seurat, features = c('nFeature_RNA', 'nCount_RNA', 'percent.mt'), ncol = 3)
+
+plot1 <- FeatureScatter(merged_seurat, feature1 = 'nCount_RNA', feature2 = 'percent.mt')
+plot2 <- FeatureScatter(merged_seurat, feature1 = 'nCount_RNA', feature2 = 'nFeature_RNA')
+CombinePlots(plots = list(plot1, plot2))
+
+#filter the cell that has gene count less than 200 and higher than 3000
+merged_seurat <- subset(merged_seurat, subset = nFeature_RNA >= 200 & nFeature_RNA <= 3000 & percent.mt <= 10)
+
+#normalized
+merged_seurat <- NormalizeData(merged_seurat, normalization.method = 'LogNormalize', scale.factor = 10000)
+
+
+
+
+
+# ###############################################################################
+#PCA Umap analyze
+# ###############################################################################
+
+#get the highly variant genes, and show the result
+merged_seurat <- FindVariableFeatures(merged_seurat, selection.method = 'vst', nfeatures =1000)
+top10 <- head(VariableFeatures(merged_seurat), 10)
+plot1 <- VariableFeaturePlot(merged_seurat)
+plot2 <- LabelPoints(plot = plot1, points = top10, repel = TRUE)
+plot2
+
+#Scale data
+all.genes <- rownames(merged_seurat)
+merged_seurat <- ScaleData(merged_seurat, features = all.genes)
+
+#Run PCA
+merged_seurat <- RunPCA(merged_seurat, features = VariableFeatures(object = merged_seurat))
+ElbowPlot(merged_seurat)
+
+#Umap
+merged_seurat <- FindNeighbors(merged_seurat, dims = 1:10)
+merged_seurat <- RunUMAP(merged_seurat, dims = 1:10)
+DimPlot(merged_seurat) + ggtitle('umap')
+
+merged_seurat <- FindClusters(merged_seurat, resolution = 0.5)
+merged_seurat$seurat_clusters_inplot <- as.factor(as.numeric(as.list(merged_seurat$seurat_clusters)))
+DimPlot(merged_seurat, group.by = 'seurat_clusters_inplot')+ggtitle('Grouped - Umap')
+DotPlot(merged_seurat, features = c('Cdh5', 'Pecam1', 'Tie1', 'Tek', 'Vwf', 'Col4a1', 'Cd68', 'Adgre1', 'Lgals3', 'Dcn', 'Col1a1', 'Col3a1', 'Myh11', 'Acta2', 'Tagln'), group.by = "seurat_clusters_inplot", col.min = 0,
+        col.max = 2.5)
+
+
+###################################################################################
+# Filter the cell that is not endothelial cell and Mark those cells
+###################################################################################
+values_to_keep <- c("1", "2", "3", "4", "5", "7", "8")
+merged_seurat_filtered <- subset(merged_seurat, subset = seurat_clusters_inplot %in% values_to_keep)
+DimPlot(merged_seurat_filtered, group.by = 'seurat_clusters_inplot')
+merged_seurat_filtered$seurat_clusters_inplot <- recode(merged_seurat$seurat_clusters_inplot, '1'='EC_1', '2'='EC_2', '3'='EC_3','4'='EC_4','5'='EC_5','7'='EC_6','8'='EC_7')
+DimPlot(merged_seurat_filtered, group.by = 'seurat_clusters_inplot', label = T) + ggtitle('Endothelial Clusters')
+
+
+
+###################################################################################
+# Differential Analysis
+###################################################################################
+Diff_seurat <- merged_seurat_filtered
+Diff_result_EC_1<-FindMarkers(Diff_seurat,min.pct = 0.25, thresh.use = 0.25,test.use = "wilcox",return.thresh = 0.01,ident.1=0)
+Diff_result_EC_2<-FindMarkers(Diff_seurat,min.pct = 0.25, thresh.use = 0.25,test.use = "wilcox",return.thresh = 0.01,ident.1=1)
+Diff_result_EC_3<-FindMarkers(Diff_seurat,min.pct = 0.25, thresh.use = 0.25,test.use = "wilcox",return.thresh = 0.01,ident.1=2)
+Diff_result_EC_4<-FindMarkers(Diff_seurat,min.pct = 0.25, thresh.use = 0.25,test.use = "wilcox",return.thresh = 0.01,ident.1=3)
+Diff_result_EC_5<-FindMarkers(Diff_seurat,min.pct = 0.25, thresh.use = 0.25,test.use = "wilcox",return.thresh = 0.01,ident.1=4)
+Diff_result_EC_6<-FindMarkers(Diff_seurat,min.pct = 0.25, thresh.use = 0.25,test.use = "wilcox",return.thresh = 0.01,ident.1=6)
+Diff_result_EC_7<-FindMarkers(Diff_seurat,min.pct = 0.25, thresh.use = 0.25,test.use = "wilcox",return.thresh = 0.01,ident.1=7)
+
+
+Diff_result_EC_1$Cluster<-'EC_1'
+Diff_result_EC_1$Symbol<-rownames(Diff_result_EC_1)
+Diff_result_EC_2$Cluster<-'EC_2'
+Diff_result_EC_2$Symbol<-rownames(Diff_result_EC_2)
+Diff_result_EC_3$Cluster<-'EC_3'
+Diff_result_EC_3$Symbol<-rownames(Diff_result_EC_3)
+Diff_result_EC_4$Cluster<-'EC_4'
+Diff_result_EC_4$Symbol<-rownames(Diff_result_EC_4)
+Diff_result_EC_5$Cluster<-'EC_5'
+Diff_result_EC_5$Symbol<-rownames(Diff_result_EC_5)
+Diff_result_EC_6$Cluster<-'EC_6'
+Diff_result_EC_6$Symbol<-rownames(Diff_result_EC_6)
+Diff_result_EC_7$Cluster<-'EC_7'
+Diff_result_EC_7$Symbol<-rownames(Diff_result_EC_7)
+
+
+Diff_tibble_EC_1<-as_tibble(Diff_result_EC_1)%>%
+  arrange(desc(abs(avg_log2FC)))
+Diff_tibble_EC_2<-as_tibble(Diff_result_EC_2)%>%
+  arrange(desc(abs(avg_log2FC)))
+Diff_tibble_EC_3<-as_tibble(Diff_result_EC_3)%>%
+  arrange(desc(abs(avg_log2FC)))
+Diff_tibble_EC_4<-as_tibble(Diff_result_EC_4)%>%
+  arrange(desc(abs(avg_log2FC)))
+Diff_tibble_EC_5<-as_tibble(Diff_result_EC_5)%>%
+  arrange(desc(abs(avg_log2FC)))
+Diff_tibble_EC_6<-as_tibble(Diff_result_EC_6)%>%
+  arrange(desc(abs(avg_log2FC)))
+Diff_tibble_EC_7<-as_tibble(Diff_result_EC_7)%>%
+  arrange(desc(abs(avg_log2FC)))
+
+
+Diff_tibble<-bind_rows(Diff_tibble_EC_1,Diff_tibble_EC_2,Diff_tibble_EC_3,Diff_tibble_EC_4,Diff_tibble_EC_5,Diff_tibble_EC_6,Diff_tibble_EC_7)
+
+Diff_tibble$`-log_p`<- -log10(Diff_tibble$p_val)
+
+Diff_tibble$`groups`<-Diff_tibble$p_val<0.01&abs(Diff_tibble$avg_log2FC)>=1
+
+
+
+ggplot(Diff_tibble,aes(x=avg_log2FC,y=`-log_p`,color=`groups`))+
+  geom_point(size=0.5)+
+  theme_minimal() +
+  labs(x = "Average Log2 Fold Change", y = "-Log10 P-value")+
+  geom_hline(yintercept = 2, linetype = "dashed")+
+  geom_vline(xintercept = c(-1,1), linetype = "dashed") 
+
+
+###################################################################################
+# Cell annotaiton
+###################################################################################
+Diff_Analysis<-Diff_tibble[Diff_tibble$p_val<0.01&abs(Diff_tibble$avg_log2FC)>=1.2&Diff_tibble$p_val_adj<0.01,]
+
+
+
+pbmc_for_SingleR <- GetAssayData(Diff_seurat, slot="data") ##获取标准化矩阵
+hpca.se <- MouseRNAseqData()
+hpca.se
+
+pbmc.hesc <- SingleR(test = pbmc_for_SingleR, ref = hpca.se, labels = hpca.se$label.main) 
+pbmc.hesc
+table(pbmc.hesc$labels,Diff_seurat$seurat_clusters)
+
+
+
+###################################################################################
+# Classifier Model Construction
+###################################################################################
+library(multiclassPairs)
+expression_matrix<-as.data.frame(pbmc_for_SingleR)
+expression_matrix<-expression_matrix[rownames(expression_matrix)%in%unique(Diff_Analysis$Symbol),]
+
+label<-data.frame(sample=colnames(Diff_seurat),class=(Diff_seurat$seurat_clusters_inplot))
+rownames(label)<-label$sample
+label<-label[-1]
+label<-t(label)
+
+n<-ncol(expression_matrix)
+set.seed(1234)
+training_samples<-sample(1:n,size=n*0.7)
+train<-expression_matrix[,training_samples]
+test<-expression_matrix[,-training_samples]
+L1<-label[nrow(label),training_samples]
+L1<-as.character(L1)
+L2<-label[nrow(label),-training_samples]
+L2<-as.character(L2)
+object<-ReadData(Data=train,
+                 Labels=L1,
+                 Platform=NULL,
+                 verbose=FALSE)
+object
+
+
+filtered_genes <- filter_genes_TSP(data_object = object,
+                                   filter = "one_vs_rest",
+                                   platform_wise = FALSE,
+                                   featureNo = 2000,
+                                   UpDown = TRUE,
+                                   verbose = TRUE)
+filtered_genes
+
+classifier <- train_one_vs_rest_TSP(data_object = object,
+                                    filtered_genes = filtered_genes,
+                                    k_range = 1:200,
+                                    include_pivot = FALSE,
+                                    one_vs_one_scores = FALSE,
+                                    platform_wise_scores = FALSE,
+                                    seed = 1234,
+                                    verbose = FALSE)
+classifier
+
+
+results_train <- predict_one_vs_rest_TSP(classifier = classifier,
+                                         Data = object,
+                                         tolerate_missed_genes = TRUE,
+                                         weighted_votes = TRUE,
+                                         classes = c('EC_1','EC_2','EC_3','EC_4','EC_5','EC_6','EC_7'),
+                                         verbose = TRUE)
+results_test <- predict_one_vs_rest_TSP(classifier = classifier,
+                                        Data = test,
+                                        tolerate_missed_genes = TRUE,
+                                        weighted_votes = TRUE,
+                                        classes=c('EC_1','EC_2','EC_3','EC_4','EC_5','EC_6','EC_7'),
+                                        verbose = TRUE)
+
+
+caret::confusionMatrix(data = factor(results_train$max_score, 
+                                     levels = unique(object$data$Labels)),
+                       reference = factor(object$data$Labels, 
+                                          levels = unique(object$data$Labels)),
+                       mode="everything")
+object2<-ReadData(Data=test,
+                  Labels=L2,
+                  Platform=NULL,
+                  verbose=FALSE)
+
+
+caret::confusionMatrix(data = factor(results_test$max_score, 
+                                     levels = unique(object$data$Labels)),
+                       reference = factor(object2$data$Labels, 
+                                          levels = unique(object$data$Labels)),
+                       mode="everything")

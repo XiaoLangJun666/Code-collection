@@ -1,0 +1,31 @@
+rule all:
+	input:
+		expand('results/RUNX1_{rep}_Profile.png', rep=['rep1','rep2'])
+
+rule computeMatrix:
+	input:
+		bw='results/RUNX1_{rep}.sorted.bam.bw',
+		ref='results/hg38_genes_whole.bed'
+	output:
+		'results/matrix_RUNX1_{rep}.mat.gz'
+	params:
+		window=2000
+	conda:
+		'envs/deeptools_env.yml'
+	threads: 4
+	shell:
+		'''
+		computeMatrix scale-regions -S {input.bw} -R {input.ref} -a {params.window} -b {params.window} -o {output}
+		'''
+
+rule plotMatrix:
+	input:
+		'results/matrix_RUNX1_{rep}.mat.gz'
+	output:
+		'results/RUNX1_{rep}_Profile.png'
+	conda:
+		'envs/deeptools_env.yml'
+	shell:
+		'''
+		plotProfile -m {input} -out {output}  --plotTitle "Runx1 Signal Coverage - INP_{wildcards.rep}" --yAxisLabel "Signal coverage"
+		'''

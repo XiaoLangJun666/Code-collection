@@ -1,0 +1,116 @@
+rule all:
+	input:
+		'results/RUNX1_findMotifs/',
+		'results/gencode.v45.primary_assembly.annotation.gtf',
+		'results/RUNX1_intersect_peak_filtered_annotated.txt',
+		'results/GRCh38.primary_assembly.genome.fa'		
+
+rule make_tag_dir:
+	input:
+		'results/{sample}_{rep}.sorted.bam'
+	output:
+		directory('results/tagDir/{sample}_{rep}/')
+	params:
+		''
+	conda:
+		'envs/homer_env.yml'
+	shell:
+		'''
+		makeTagDirectory {output} {input} 
+		'''
+
+rule findPeaks:
+	input:
+		tag_1='results/tagDir/INP_{rep}/',
+		tag_2='results/tagDir/RUNX1_{rep}/'
+	output:
+		'results/RUNX1_{rep}.txt'
+	conda:
+		'envs/homer_env.yml'
+	shell:
+		'''
+		findPeaks {input.tag_2} -style factor  -o {output} -i {input.tag_1} 
+		'''
+
+rule convertPeakFiles:
+	input:
+		'results/RUNX1_{rep}.txt'
+	output:
+		'results/RUNX1_{rep}.bed'
+	conda:
+		'envs/homer_env.yml'
+	shell:
+		'''
+		pos2bed.pl {input} > {output}
+		'''
+
+rule intersect_peaks:
+	input:
+		peak_1='results/RUNX1_rep1.bed',
+		peak_2='results/RUNX1_rep2.bed'
+	output:
+		'results/RUNX1_intersect_peak.bed'
+	conda:
+		'envs/bedtools_env.yml'
+	shell:
+		'''
+		bedtools intersect -a {input.peak_1} -b {input.peak_2} > {output}
+		'''
+
+rule filter_blacklist:
+	input:
+		peak='results/RUNX1_intersect_peak.bed',
+		black_list='results/hg38-blacklist.v2.bed'
+	output:
+		'results/RUNX1_intersect_peak_filtered.bed'
+	conda:
+		'envs/bedtools_env.yml'
+	shell:
+		'''
+		bedtools intersect -v -a {input.peak} -b {input.black_list} > {output}
+		'''
+rule unzip_gtf:
+	input:
+		'results/gencode.v45.primary_assembly.annotation.gtf.gz'	
+	output:
+		'results/gencode.v45.primary_assembly.annotation.gtf'
+	shell:
+		'''
+		gunzip -c  {input} > {output}
+		'''
+
+rule annotate_peaks:
+	input:
+		peak='results/RUNX1_intersect_peak_filtered.bed',
+		gtf='results/gencode.v45.primary_assembly.annotation.gtf'
+	output:
+		'results/RUNX1_intersect_peak_filtered_annotated.txt'
+	conda:
+		'envs/homer_env.yml'
+	shell:
+		'''
+		annotatePeaks.pl {input.peak} hg38  -gtf {input.gtf} > {output}
+		'''
+
+rule unzip_genome:
+	input:
+		'results/GRCh38.primary_assembly.genome.fa.gz'	
+	output:
+		'results/GRCh38.primary_assembly.genome.fa'
+	shell:
+		'''
+		gunzip -c {input} > {output}
+		'''
+
+rule motifs:
+	input:
+		peak='results/RUNX1_intersect_peak_filtered.bed',
+		genome='results/GRCh38.primary_assembly.genome.fa'
+	output:
+		directory('results/RUNX1_findMotifs/')
+	conda:
+		'envs/homer_env.yml'
+	shell:
+		'''
+		findMotifsGenome.pl {input.peak} {input.genome} {output} -size 200 
+		'''

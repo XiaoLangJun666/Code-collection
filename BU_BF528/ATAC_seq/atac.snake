@@ -1,0 +1,389 @@
+rule all:
+	input:
+		expand('results/ATAC{sample}_{rep}_fastqc.html',sample=['rep3','rep4'],rep=['R1','R2']),
+		expand('results/ATAC{sample}_{rep}.{condition}.trimmed.fastq.gz',sample=['rep3','rep4'],rep=['R1','R2'],condition=['paired','unpaired']),
+		expand('index_whole/GRCh38{bt2_base}',bt2_base=['.1.bt2','.2.bt2', '.3.bt2', '.4.bt2', '.rev.1.bt2', '.rev.2.bt2']),
+		'results/ATAC_annotated_peaks.txt',
+		'results/multiqc_report.html',
+		'results/ATAC_findMotifs/',
+		expand('results/ATAC{sample}_size_hist_plot.png',sample=['rep3','rep4']),
+		expand('results/{type}_ATAC{sample}_Profile.png',sample=['rep3','rep4'],type=['NFR','NBR'])
+		
+
+
+rule fastqc:
+	input:
+		'atacseq/ATAC{sample}_{rep}.fastq.gz'
+	output:
+		'results/ATAC{sample}_{rep}_fastqc.html'
+	params:
+		'results/'
+	conda:
+		'envs/fastqc_base.yml'
+	shell:
+		'''
+		fastqc {input} -o {params}
+		'''
+		
+rule trimmomatic:
+	input:
+		fastq1='atacseq/ATAC{sample}_R1.fastq.gz',
+		fastq2='atacseq/ATAC{sample}_R2.fastq.gz',
+		adapter='NexteraPE-PE.fa'
+	output:
+		fastq1_paired='results/ATAC{sample}_R1.paired.trimmed.fastq.gz',
+		fastq1_unpaired='results/ATAC{sample}_R1.unpaired.trimmed.fastq.gz',
+		fastq2_paired='results/ATAC{sample}_R2.paired.trimmed.fastq.gz',
+		fastq2_unpaired='results/ATAC{sample}_R2.unpaired.trimmed.fastq.gz'
+	threads:
+		16
+	conda:
+		'envs/trimmomatic_env.yml'
+	
+	shell:
+		'''
+		trimmomatic PE {input.fastq1}  {input.fastq2} {output.fastq1_paired} {output.fastq1_unpaired} {output.fastq2_paired} {output.fastq2_unpaired} ILLUMINACLIP:{input.adapter}:2:30:10:2:True LEADING:3 TRAILING:3 MINLEN:36
+		'''
+
+rule bowtie2_build_gencode:
+	input:
+		'GRCh38.primary_assembly.genome.fa.gz'
+	output:
+		expand('results/index_whole/GRCh38{bt2_base}',bt2_base=['.1.bt2','.2.bt2', '.3.bt2', '.4.bt2', '.rev.1.bt2', '.rev.2.bt2'])
+	params:
+		'index_whole/GRCh38'
+	threads: 16
+	conda:
+		'envs/bowtie2_env.yml'
+	shell:
+		'''
+		bowtie2-build --threads {threads} {input} {params}
+		'''
+
+rule align:
+	input:
+		fastq1='results/ATAC{sample}_R1.paired.trimmed.fastq.gz',
+		fastq2='results/ATAC{sample}_R2.paired.trimmed.fastq.gz'
+	output:
+		'results/ATAC{sample}.sam'
+	params:
+		'index_whole/GRCh38'
+	conda:
+		'envs/bowtie2_env.yml'
+	shell:
+		'''
+		bowtie2 -x {params} -1 {input.fastq1} -2 {input.fastq2} -S {output}  -X 2000
+		'''
+
+rule sort_sam:
+	input:
+		'results/ATAC{sample}.sam'
+	output:
+		'results/ATAC{sample}_sorted.sam'
+	conda:
+		'envs/samtools_env.yml'
+	shell:
+		'''
+		samtools sort {input} -o {output}
+		'''
+
+rule mark_duplicate:
+	input:
+		'results/ATAC{sample}_sorted.sam'
+	output:
+		sam='results/ATAC{sample}_filtered.sam',
+		metrics='results/ATAC{sample}_filtered_metrics.txt'
+	conda:
+		'envs/samtools_env.yml'
+	shell:
+		'''
+		java -Xmx252g -jar /share/pkg.7/picard/2.25.2/install/bin/picard.jar  MarkDuplicates \
+		I={input} \
+		O={output.sam} \
+		M={output.metrics} \
+		REMOVE_DUPLICATES=true
+		'''
+
+rule mt_remove:
+	input:
+		'results/ATAC{sample}_filtered.sam'
+	output:
+		'results/ATAC{sample}.bam'
+	conda:
+		'envs/samtools_env.yml'
+	shell:
+		'''
+		samtools view -h {input} | grep -v "^@SQ.*SN:chrM" | samtools view -bS - > {output}
+		'''
+
+rule sort_bam:
+	input:
+		'results/ATAC{sample}.bam'
+	output:
+		'results/ATAC{sample}.sorted.bam'
+	conda:
+		'envs/samtools_env.yml'
+	shell:
+		'''
+		samtools sort {input} -o {output}
+		'''
+
+rule index_bam:
+	input:
+		'results/ATAC{sample}.sorted.bam'
+	output:
+		'results/ATAC{sample}.sorted.bam.bai'
+	conda:
+		'envs/samtools_env.yml'
+	shell:
+		'''
+		samtools index {input}
+		'''
+
+rule read_shift:
+	input:
+		bam='results/ATAC{sample}.sorted.bam',
+		bai='results/ATAC{sample}.sorted.bam.bai'
+	output:
+		'results/ATAC{sample}.shifted.bam'
+	conda:
+		'envs/deeptools_env.yml'
+	shell:
+		'''
+		alignmentSieve -b {input.bam} -o {output} --ATACshift
+		'''
+
+rule flagstats:
+	input:
+		'results/ATAC{sample}.shifted.bam'
+	output:
+		'results/ATAC{sample}_flagstats.txt'
+	conda:
+		'envs/samtools_env.yml'
+	shell:
+		'''
+		samtools flagstat {input} > {output}
+		'''
+
+rule multiqc:
+	input:
+		expand('results/ATAC{sample}_flagstats.txt',sample=['rep3','rep4'])
+	output:
+		'results/multiqc_report.html'
+	params:
+		'results/'
+	conda:
+		'envs/multiqc_env.yml'
+	shell:
+		'''
+		multiqc {params} -o {params}
+		'''
+
+rule peak_calling:
+	input:
+		'results/ATAC{sample}.shifted.bam'
+	output:
+		'results/ATAC{sample}_peaks.narrowPeak'
+	params:
+		'results/ATAC{sample}'
+	conda:
+		'envs/macs3_env.yml'
+	shell:
+		'''
+		macs3 callpeak -f BAMPE -t {input} -g hs -n {params} -B -q 0.01
+		'''
+
+rule intersect_peaks:
+	input:
+		peak_1='results/ATACrep3_peaks.narrowPeak',
+		peak_2='results/ATACrep4_peaks.narrowPeak'
+	output:
+		'results/ATAC_intersect_peaks.narrowPeak'
+	conda:
+		'envs/bedtools_env.yml'
+	shell:
+		'''
+		bedtools intersect -a {input.peak_1} -b {input.peak_2} -wo -f 0.50 -r > {output}
+		'''
+rule blacklist_region:
+	input:
+		peaks='results/ATAC_intersect_peaks.narrowPeak',
+		blacklist='hg38-blacklist.v2.bed'
+	output:
+		'results/ATAC_intersect_peaks.filtered.narrowPeak'
+	conda:
+		'envs/bedtools_env.yml'
+	shell:
+		'''
+		bedtools intersect -a {input.peaks} -b {input.blacklist} -v > {output}
+		'''
+
+rule peak_annotate:
+	input:
+		peak='results/ATAC_intersect_peaks.filtered.narrowPeak',
+		gtf='gencode.v45.primary_assembly.annotation.gtf'
+	output:
+		'results/ATAC_annotated_peaks.txt'
+	conda:
+		'envs/homer_env.yml'
+	shell:
+		'''
+		annotatePeaks.pl {input.peak} hg38  -gtf {input.gtf} > {output}
+		'''
+
+rule motifs:
+	input:
+		peak='results/ATAC_intersect_peaks.filtered.narrowPeak',
+		genome='GRCh38.primary_assembly.genome.fa'
+	output:
+		directory('results/ATAC_findMotifs/')
+	conda:
+		'envs/homer_env.yml'
+	shell:
+		'''
+		findMotifsGenome.pl {input.peak} {input.genome} {output} -size 200
+		'''
+
+rule shift_sort:
+	input:
+		'results/ATAC{sample}.shifted.bam'
+	output:
+		'results/ATAC{sample}_sorted_shifted.bam'
+	conda:
+		'envs/samtools_env.yml'
+	shell:
+		'''
+		samtools sort {input} -o {output}
+		'''
+rule shift_index:
+	input:
+		'results/ATAC{sample}_sorted_shifted.bam'
+	output:
+		'results/ATAC{sample}_sorted_shifted.bam.bai'
+	conda:
+		'envs/samtools_env.yml'
+	shell:
+		'''
+		samtools index {input}
+		'''
+
+rule bamPEFragmentSize:
+	input:
+		bam='results/ATAC{sample}_sorted_shifted.bam',
+		bai='results/ATAC{sample}_sorted_shifted.bam.bai'
+	output:
+		'results/ATAC{sample}_size_hist_plot.png'
+	conda:
+		'envs/deeptools_env.yml'
+	shell:
+		'''
+		bamPEFragmentSize -b {input.bam} -hist {output} -p 16 -T "Fragment Size Distribution for ATAC{wildcards.sample}" --maxFragmentLength 1000
+		'''
+
+rule bamCoverage:
+	input:
+		bam='results/ATAC{sample}_sorted_shifted.bam',
+		bai='results/ATAC{sample}_sorted_shifted.bam.bai'
+	output:
+		'results/ATAC{sample}_sorted_shifted.bam.bw'
+	threads: 4
+	conda:
+		'envs/deeptools_env.yml'
+	shell:
+		'''
+		bamCoverage -b {input.bam} -o {output}
+		'''
+
+
+rule NFR_filter:
+	input:
+		'results/ATAC{sample}_sorted_shifted.bam'
+	output:
+		'results/NFR_ATAC{sample}.bam'
+	conda:
+		'envs/samtools_env.yml'
+	shell:
+		'''
+		samtools view -h {input} | awk '{{if($1 ~ /^@/ || $9 <= 100) print $0}}' | samtools view -bS - > {output}
+		'''
+
+rule NBR_filter:
+	input:
+		'results/ATAC{sample}_sorted_shifted.bam'
+	output:
+		'results/NBR_ATAC{sample}.bam'
+	conda:
+		'envs/samtools_env.yml'
+	shell:
+		'''
+		samtools view -h {input} | awk '{{if($1 ~ /^@/ || ($9 >= 180 && $9 <= 247)) print $0}}' | samtools view -bS - > {output}
+		'''
+
+
+rule sort_NBR_NFR:
+	input:
+		'results/{type}_ATAC{sample}.bam'
+	output:
+		'results/{type}_sorted_ATAC{sample}.bam'
+	conda:
+		'envs/samtools_env.yml'
+	shell:
+		'''
+		samtools sort {input} -o {output}
+		'''
+
+rule index_NBR_NFR:
+	input:
+		'results/{type}_sorted_ATAC{sample}.bam'
+	output:
+		'results/{type}_sorted_ATAC{sample}.bam.bai'
+	conda:
+		'envs/samtools_env.yml'
+	shell:
+		'''
+		samtools index {input}
+		'''
+
+rule bamCoverage_NBR_NFR:
+	input:
+		bam='results/{type}_sorted_ATAC{sample}.bam',
+		bai='results/{type}_sorted_ATAC{sample}.bam.bai'
+	output:
+		'results/{type}_sorted_ATAC{sample}.bam.bw'
+	threads: 8
+	conda:
+		'envs/deeptools_env.yml'
+	shell:
+		'''
+		bamCoverage -b {input.bam} -o {output}
+		'''
+
+
+rule computeMatrix:
+	input:
+		bw='results/{type}_sorted_ATAC{sample}.bam.bw',
+		ref='hg38_genes_whole.bed'
+	output: 
+		'results/{type}_ATAC{sample}.mat.gz'
+	params: 
+		window=1000
+	conda:
+		'envs/deeptools_env.yml'
+	threads: 4
+	shell:  
+		'''
+		computeMatrix reference-point --referencePoint TSS -S {input.bw} -R {input.ref} -a {params.window} -b {params.window} -o {output}
+		'''
+
+rule plotMatrix:
+	input:
+		'results/{type}_ATAC{sample}.mat.gz'
+	output:
+		'results/{type}_ATAC{sample}_Profile.png'
+	conda:
+		'envs/deeptools_env.yml'
+	shell:
+		'''
+		plotProfile -m {input} -out {output}  --plotTitle "ATAC_{wildcards.sample}" --yAxisLabel "Signal coverage"
+		'''
+

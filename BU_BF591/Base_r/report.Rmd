@@ -1,0 +1,198 @@
+---
+title: "Assignment: Base R"
+author: Adam Labadorf
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+source("main.R")
+```
+
+
+## 1. Logical Tests on Vectors 
+
+While logical tests like > and == operate on scalar values, it is often useful
+to perform these tests on each element of a vector for the purposes of selecting
+elements of interest, or learning things about the vector. For example, we
+might be interested in testing whether the elements of a numeric vector are less
+than zero. The `less_than_zero(x)` function should return a logical vector that
+is `TRUE` when an element is strictly less than zero, and `FALSE` otherwise. We
+will test this on a vector of 100 samples drawn from a normal distribution with
+mean zero and standard deviation of 1.
+
+```{r, message=FALSE}
+# NB: sample_normal is defined in main.R
+x <- sample_normal(10)
+less_than_zero(x)
+```
+
+Recall that logical values `TRUE` and `FALSE` are numerically equal to 1 and 0,
+respectively. We can therefore perform arithmetic operations on them. A quick
+way to see how many values are `TRUE` in a logical vector by summing it:
+
+```{r, message=FALSE}
+sum(less_than_zero(x))
+```
+
+## 2. More Complicated Logical Tests
+
+We sometimes have to write tests that check for more complex criteria. For
+example, we might be interested in knowing how many elements in a vector fall
+within a closed interval, that is are greater than some value $a$ and less than
+$b$. The `is_between(x, a, b)` should return a logical vector that is `TRUE`
+when an element is strictly between values `a` and `b`, and `FALSE` otherwise.
+
+```{r}
+is_between(x, -1, 1)
+```
+
+We can again use the fact that logical vectors are numeric to sanity check our
+code. Recall from above that our vector has 100 samples drawn from a normal
+distribution with mean zero and standard devation 1. From the theoretical
+definition of a normal distribution, we would expect 68.2% of our values to fall
+within one standard deviation of zero. We can check that similarly to above.
+
+```{r}
+sum(is_between(x, -1, 1))
+```
+
+Due to sampling error the fraction of samples in this range likely won't be
+exactly 68.2% for any given data set, but if we increase the number of samples
+it should approach this number.
+
+```{r}
+# now sample 100k times and check to see how many fall within 1 standard deviation of 0
+num_samples <- 100000
+sum(is_between(sample_normal(num_samples), -1, 1))/num_samples
+```
+
+## 3. Missing Values
+
+Missing values can cause some numerical summarization procedures, like
+arithmetic `mean()`, to return `NA`. Sometimes we must remove `NA` values
+explicitly to avoid this. We can use the function `is.na()` to test if a value
+is `NA` in a function that returns only the elements of a vector that are not
+`NA`. Below we simulate a normally distributed dataset that has 10% of its
+values missing, and use the function `rm_na(x)` to create a new vector that has
+only the non-missing values.
+
+```{r}
+# NB: sample_normal_w_missing is defined in main.R
+x <- sample_normal_w_missing(1000, missing_frac=0.1)
+
+x_non_missing <- rm_na(x)
+length(x_non_missing)
+```
+
+## 4. Row-wise Matrix Computations
+
+Matrices are grids of numbers arranged by rows and columns. Alternatively, we
+may think of a matrix as a set of vectors of the same length oriented in the
+same direction. In this way, the computations we can perform on vectors can also
+be applied to either the rows or columns of a matrix. To do this, we must
+iterate over either rows or columns and perform a computation for each. In R,
+this is most efficiently done using the `apply()` family of functions.
+
+Consider a matrix where each row corresponds to a gene and each column is a
+sample from a gene expression experiment. It may be informative to summarize
+each gene to its median expression value across all samples. We will do this on
+a simulated gene expression matrix using the `row_medians()` function.
+
+```{r}
+# simulated gene expression dataset
+# NB: simulate_gene_expression is defined in main.R
+gene_exp <- simulate_gene_expression(num_samples=30, num_genes=10)
+row_medians(gene_exp)
+```
+
+## 5. Generalizing Row-wise Matrix Computations
+
+In the previous example, we hard-coded `median()` as the summarization function.
+Many different summarization functions are available, including `mean()`, `min()`,
+et c. Each of these functions accepts a vector as its first argument, allowing
+us to generalize the function that computes row-wise summarizations so that it
+may accept any of these functions as input. We will generalize this function
+to accept a matrix and a function in the `summarize_rows()` function.
+
+```{r}
+# simulated gene expression dataset
+gene_exp <- simulate_gene_expression(num_samples=30, num_genes=10)
+
+# with median, same as above
+summarize_rows(gene_exp, median)
+```
+
+In addition to median, we will summarize with several other functions as well.
+With arithmetic mean:
+
+```{r}
+summarize_rows(gene_exp, mean)
+```
+
+With standard deviation:
+
+```{r}
+summarize_rows(gene_exp, sd)
+```
+
+And with minimum:
+
+```{r}
+summarize_rows(gene_exp, min)
+```
+
+## 6. Creating Summarization Data Frame
+
+Going one step further, it can be useful to create a data frame that contains
+many different summarizations of a matrix together. We will use what we have
+learnt in earlier in this exercise to do this with the `summarize_matrix()`
+function. This function returns a data frame with one row per row in the input
+matrix and columns in order as follows:
+
+* `mean` - arithmetic mean
+* `stdev` - standard deviation
+* `median` - median
+* `min` - minimum value
+* `max` - maximum value
+* `num_lt_0` - the number of values less than zero
+* `num_btw_1_and_5` - the number of values between 1 and 5
+* `num_na` - the number of missing values
+
+```{r}
+# simulated gene expression dataset
+gene_exp <- simulate_gene_expression(num_samples=30, num_genes=10)
+
+summary_df <- summarize_matrix(gene_exp)
+kableExtra::kable(summary_df)
+```
+
+## 7. Challenge: Handle Missingness
+
+Note: this section is optional and meant to be a challenge. The tests for this
+functionality are commented out in `test_main.R`. Feel free to uncomment them
+to test out your code!
+
+As mentioned earlier, sometimes data values are missing. R represents these
+values with `NA`. Missing values can influence result of mathematical functions,
+as by default any summarizing computation involving the value `NA` will produce
+the value `NA`.
+
+```{r}
+# simulated gene expression dataset
+# NB: simulate_gene_expression_s_missing is defined in main.R
+gene_exp <- simulate_gene_expression_w_missing(num_samples=30, num_genes=10, missing_frac=0.1)
+
+summary_df <- summarize_matrix(gene_exp)
+kableExtra::kable(summary_df)
+```
+
+As we can see, most of the values of the summarization matrix are now `NA`. The
+function signatures for `summarize_rows` and `summarize_matrix` include the
+`na.rm` named argument. When `na.rm=TRUE`, any `NA` values should be eliminated
+from the row vectors prior to computing summarization.
+
+```{r}
+summary_df <- summarize_matrix(gene_exp, na.rm=TRUE)
+kableExtra::kable(summary_df)
+```

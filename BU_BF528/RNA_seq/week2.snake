@@ -1,0 +1,70 @@
+# we have given you the rules you will need to fill out remember when structuring your dependencies, 
+
+# we are only downloading the GTF and genome.fa, we will not be doing anything further with them this week
+
+names = ['ADrep1','ADrep2','P0rep1','P0rep2','P4rep1','P4rep2','P7rep1','P7rep2']
+
+
+rule all:
+	input: 
+		expand('results/{name}_flagstat.txt',name=names),
+		expand('results/{name}.bam',name=names),
+		'results/GRCm39.primary_assembly.genome.fa.gz',
+		'results/gencode.vM34.primary_assembly.annotation.gtf.gz',
+		'results/gencode.vM34.primary_assembly.annotation.gtf'
+rule get_m39:
+	output:
+		'results/GRCm39.primary_assembly.genome.fa.gz'
+	params:
+		url='https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_mouse/release_M34/GRCm39.primary_assembly.genome.fa.gz'
+	shell:
+		'''
+		wget -P results/  {params.url}
+		''' 
+
+rule get_m39_gtf:
+	output:
+		'results/gencode.vM34.primary_assembly.annotation.gtf.gz'
+	params:
+		url='https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_mouse/release_M34/gencode.vM34.primary_assembly.annotation.gtf.gz'
+	shell:
+		'''
+		wget -P results/ {params.url}
+		'''
+
+rule decompress_gtf:
+	input:
+		'results/gencode.vM34.primary_assembly.annotation.gtf.gz'
+	output:
+		'results/gencode.vM34.primary_assembly.annotation.gtf'
+	shell:
+		'''
+		gunzip -c {input} > {output}
+		'''
+# make sure to read up on how STAR names it output files
+
+rule star:
+	input:
+		ref='results/m39_star/',
+		fq1='samples/{name}_R1.fastq.gz',
+		fq2='samples/{name}_R2.fastq.gz'	
+	output: 
+		bam='results/{name}.bam'
+	params:
+		prefix='star_middle/{name}_'
+	threads:8
+	shell:
+		'''
+		STAR --runThreadN {threads}  --genomeDir {input.ref} --readFilesIn {input.fq1} {input.fq2} --readFilesCommand zcat --outFileNamePrefix {params.prefix} --outSAMtype BAM Unsorted && \
+		mv {params.prefix}Aligned.out.bam {output.bam}
+		'''
+
+rule samtools_flagstat:
+	input:
+		bam='results/{name}.bam'
+	output:
+		flagstat='results/{name}_flagstat.txt'
+	shell:
+		'''
+		samtools flagstats {input.bam} > {output.flagstat}
+		'''

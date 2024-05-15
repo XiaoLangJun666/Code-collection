@@ -1,0 +1,255 @@
+---
+title: Assignment 3
+output: html_document
+---
+
+```{r code block for setup, message=FALSE}
+source('main.R')
+```
+
+## Setup
+Feel free to refer to the reference_report.html provided in the assignment repo.
+This will let you see a preview of the output the report is intended to
+generate, and this will be especially helpful for the sections that create
+plots. The example report also displays the first few rows of all the data you
+will be generating in each section for your reference. 
+
+This assignment will make use of the
+[RColorBrewer](https://www.r-graph-gallery.com/38-rcolorbrewers-palettes.html)
+package to choose an appropriate color palette for a heatmap in part 8. Please
+make sure to install this package before starting.
+
+We will be using three main datasets that are contained within the repo: 
+
+1. example_intensity_data.csv - a dataframe containing the normalized intensity
+values from a microarray experiment
+
+2. proj_metadata.csv - a dataframe containing the associated metadata for the
+samples of the experiment
+
+3. differential_expression_results.csv - a dataframe containing the results of a
+differential expression analysis on the probes from this experiment.
+
+## 1. Read in the example_intensity_data
+To begin, we will read in the same data you have used in previous experiments
+(`example_intensity_data.csv`). This time, we do __not__ want to read it in as a
+tibble as some of our downstream operations will not work correctly without
+additional steps. 
+
+__Write a function, `read_data`, that reads in the example_intensity_data.csv as
+a *dataframe*. Return the first two rows of the dataframe below__:
+
+```{r code block to read data}
+intensity <- read_data('data/example_intensity_data.csv', ' ')
+head(intensity, 2)
+```
+### Background on PCA 
+PCA is an exploratory data analysis technique commonly used to reduce the
+dimensionality of data while simultaneously minimizing information loss.
+Understanding the inner workings of PCA will require an in-depth review of
+linear algebra and is beyond the scope of this specific assignment. We will
+provide several links and references if you wish to do so on your own. At its
+core, PCA creates new uncorrelated linear combinations of the original variables
+that successively maximize variance. Thus, the first principle component (PC)
+represents the direction of the data that explains a maximal amount of variance.
+The second PC represents the direction that captures the second most variance
+and so on and so forth. As you can infer, if a small number of PCs capture a
+majority of variance contained within a dataset, they can be used as a lower
+dimensional representation of the data.
+
+Before we perform PCA, we will transpose and scale our data. These topics are
+covered in more detail in the course textbook and they are already implemented
+in R as the base functions `t()` and `scale()`. First, we will transpose the
+dataframe we generated in part 1 and scale the values before
+performing PCA using `prcomp()`.
+
+*Hint*: The `prcomp()` function has flags to center and scale data. As
+we have already scaled our data, we will set both the center and scale flags to
+FALSE.
+
+__Run the code below as is to perform PCA on your dataframe that you read in
+above.__
+
+```{r code block to transpose, scale data and perform PCA}
+pca_results <- prcomp(scale(t(intensity)), center=FALSE, scale=FALSE)
+summary(pca_results)
+```
+
+## 2. Calculating the variance explained by Principal Components
+Now that we have performed PCA, we are interested in the proportion of variance
+explained by each principal component. This can be determined by dividing the
+variance of each PC by the sum total of the variance of all PCs.
+
+__Write a function, `calculate_variance_explained`, that calculates the
+proportion of variance explained by each principal component from the
+`pca_results` object and returns a *vector* of those values below.__
+
+*Hint*: The standard deviation values of each PC may be accessed by
+pca_results$sdev. Remember the relationship between standard deviation and
+variance.
+
+```{r code block to calculate variance}
+pc_variance_explained <- calculate_variance_explained(pca_results)
+pc_variance_explained
+```
+
+## 3. Make a tibble with variance explained and cumulative variance explained for the PCs
+__Using the vector of variance explained values you just generated,
+`pc_variance_explained`, write a function, `make_variance_tibble`, that uses
+this vector along with the `pca_results` object to construct a *tibble* with
+three columns containing the name of each PC, the variance explained by each PC,
+and the cumulative sum of variance explained. Name these columns
+"principal_components", "variance_explained", and "cumulative" respectively.
+Return the first five rows below.__
+
+```{r code block to construct a tibble with PCs, variance explained, and cumulative variance explained}
+variance_tibble <- make_variance_tibble(pc_variance_explained, pca_results)
+head(variance_tibble, 5)
+```
+
+### Create descriptive captions for plots here after you've finished
+For the next few sections, we will be generating plots. It is customary to
+provide descriptive captions for figures that succinctly state what's being
+displayed. Browse a few scientific papers of your choice to get a sense for how
+figure captions are structured and written. For the sections numbered 4, 5, 8,
+please use the following code block to write descriptive captions for these
+figures. We have assigned these captions to variables, and if you look at the
+`{r code}` chunk for these parts (4, 5, 8), you will notice the `fig.cap` flag
+which will use these variables to create captions underneath the respective
+figures. Until you've completed all the parts, you may safely leave these
+captions blank.
+
+```{r code block to create descriptive captions}
+caption_4 <- 'Variance Explained by Principal Components and Cumulative Variance Plot'
+caption_5 <- 'Biplot of New Scores for Principal Components 1 and 2'
+caption_8 <- 'Heatmap of Intensity Values for Differentially Expressed Probes'
+```
+
+## 4. Plot the variance explained and cumulative variance for the PCs
+__In the Rmarkdown code block below, use the `variance_tibble` generated in part
+3 , and create a *plot* using ggplot2 that contains both a barchart representing
+the variance explained by each individual PC along with a scatterplot (connected
+with a line) that displays the cumulative sum of the variance explained across
+all the PCs. Provide appropriate labels for each plot. Refer to the plot found in 
+the reference_report.html for inspiration.__
+
+*Hint*: On your plot, you want the x-axis to represent each principal component
+in order of descending amounts of variance explained from left to right (i.e.
+PC1, PC2, PC3, etc.). You may run into an issue where your axis is automatically
+sorted differently. Please refer to discussions on lexicographical ordering vs.
+numeric ordering.
+
+```{r code block to plot variance explained and cumulative variance explained, fig.cap = caption_4}
+#Create a ggplot2 with the plot described above, refer to the reference report
+
+variance_tibble$principal_components<-factor(variance_tibble$principal_components,
+                              levels=variance_tibble$principal_components)
+
+ggplot(variance_tibble,aes(x=principal_components,y=variance_explained,group=1))+
+  geom_bar(stat='identity',fill='blue')+
+  geom_line(aes(x=principal_components,y=cumulative),color='red',size=0.5,alpha=0.8)+
+  geom_point(aes(x=principal_components,y=cumulative),color='green')+
+  
+  labs(x='Principal Components(PCs)',
+       y='Variance Explained')+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  
+```
+
+
+## 5. Biplot of the first two principal components
+As the first two PCs represent the first and second most amounts of variance, it
+is common to see scatter plots of the scores of the first two PCs for each
+sample. This biplot enables you to quickly see how your samples 'separate'
+across the PCs that represent (hopefully) the majority of variance in your data.
+
+__Write a function, `make_biplot` that uses the `pca_results` generated in part
+1 and returns a *plot* of the first two principal components labeled by their
+SixSubTypesClassification found in the `proj_metadata.csv`.__
+
+*Hint*: You may access the values to plot by using `$x` (`pca_results$x`) and
+selecting the columns representing PC1 and PC2.
+
+*Warning*: Since the first and second PCs likely represent different amounts of
+variance, visually interpreting these plots requires care as the scale of the
+'importance' of the axes differ. 
+
+```{r code block to make a biplot of PC1 and PC2, message = FALSE, fig.cap = caption_5}
+make_biplot('data/proj_metadata.csv', pca_results)
+```
+
+
+## 6. Filter the differential_expression_results.csv for significant probes
+We have provided you with sample results of differential expression analysis
+performed on the intensity data from part 1, contained in a CSV file. We are
+going to extract a list of probes that are considered differentially expressed,
+and eventually generate a heatmap of the normalized intensity values for these
+selected probes.
+
+Write a function, list_significant_probes, that works with a tibble of the
+differential expression results, filters the data to only contain significant
+probes with a 'padj' of less than .01, and returns a list of the significant
+probe IDs. Ensure your function defines two arguments: the tibble of
+differential expression results and a user-specified value for the 'padj'
+threshold.
+
+*Hint*: In general, it is a good practice to build functions that are flexible
+and do not contain hard-coded values so that you can reuse your function for
+different applications or analyses with minimal changes. For instance, we have
+you construct this function with a 'padj' value argument so that theoretically,
+in the future, you could easily re-run it with a different value. For our
+purposes, we will manually set this argument as .01.
+
+```{r code block to filter DE probes, and return matrix of selected normalized intensity values}
+# read the differential expression results in as a tibble first
+
+diff_exp_tibble <- readr::read_csv("data/differential_expression_results.csv",
+                                   skip=1,
+                                   col_names=c("probeid","t","p","padj")
+                                   )
+
+sig_ids <- list_significant_probes(diff_exp_tibble, .01)
+head(sig_ids)
+length(sig_ids)
+```
+
+## 7. Extract out the normalized intensity values for the significant probes 
+Now that we have a list of significant probes, we want to make a visualization,
+in the form of a heatmap, that will allow us to quickly determine if we see any
+patterns or clusters amongst these differentially expressed probes. To do this,
+we will extract out the intensity values from part 1 for these probes that are
+significantly differentially expressed in part 6 and plot them in a heatmap.
+
+__Write a function, `return_de_intensity`, that uses the list of significant
+probes you generated in part 6 `sig_ids` and the example intensity data from
+part 1 `intensity` to return a *matrix* of intensity values for just the
+significant probes.__
+
+```{r code block to return the intensity matrix for DE probes}
+de_intensity <- return_de_intensity(intensity, sig_ids)
+head(de_intensity, 2)
+```
+
+
+
+## 8. Generate a heatmap of normalized intensity values (color-blind friendly)
+__Write a function, `heatmap_plot`, that uses the `de_intensity` results and
+returns a heatmap *plot*. Have the function take three arguments: the
+`de_intensity` results, a string specifying the RColorBrewer Palette and an
+integer with the number of colors for that palette.__
+
+*Hint*: Use the base R `heatmap()` function. For this example, we will only be
+passing two arguments: the `matrix` of normalized intensity values from part 7,
+and a color-blind friendly color palette. Look at the RColorBrewer documentation
+and choose a suitable palette. Your usage should look something like this:
+`heatmap(your_normalized_intensity_values, col = RColorBrewer_palette)`. The
+`heatmap()` function will automatically scale data as well as perform
+hierarchical clustering. For the purposes of this assignment, we will not go
+in-depth into these topics, and you will run `heatmap()` with default options
+besides `col`.
+
+```{r code block to plot heatmap of normalized intensity values for DE probes, fig.cap = caption_8}
+plot_heatmap(de_intensity, 11, 'RdBu')
+```
+
+

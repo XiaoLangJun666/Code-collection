@@ -1,0 +1,5 @@
+name,srr,ftp_link,condition,replicate,orig_srr
+INP_rep1,SRR2919474,ftp://ftp.sra.ebi.ac.uk/vol1/fastq/SRR291/004/SRR2919474/SRR2919474.fastq.gz,INP,rep1,SRR2919474
+RUNX1_rep1,SRR2919475,ftp://ftp.sra.ebi.ac.uk/vol1/fastq/SRR291/005/SRR2919475/SRR2919475.fastq.gz,RUNX1,rep1,SRR2919475
+INP_rep2,SRR2919476,ftp://ftp.sra.ebi.ac.uk/vol1/fastq/SRR291/006/SRR2919476/SRR2919476.fastq.gz,INP,rep2,SRR2919476
+RUNX1_rep2,SRR2919477,ftp://ftp.sra.ebi.ac.uk/vol1/fastq/SRR291/007/SRR2919477/SRR2919477.fastq.gz,RUNX1,rep2,SRR2919477

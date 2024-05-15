@@ -1,0 +1,223 @@
+---
+title: "Assignment Tidyverse Basics"
+author: Dakota Hawkins
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+source("main.R")
+```
+
+
+## 1.  Reading in Sample Metadata
+
+To begin, we first want to read in our project metadata and expression data. Using
+`tidyverse` packages, read in the sample metadata file, `proj_metadata.csv`, and
+return the head of the **first five** columns of the `tibble`.
+
+```{r, message=FALSE}
+metadata <- readr::read_csv("data/proj_metadata.csv")
+knitr::kable(head(metadata)[c(1:5)])
+```
+
+## 2. Reading in Expression Data
+
+Reading the expression matrix is more complicated. In the supplied R script,
+implement the `read_expression_table` function to properly handle the format
+of `example_intensity_data.csv`, including specifying the value delimiter,
+transposing the matrix so samples are rows and probes are columns, and likewise
+ensure a `tibble` object is returned.
+```{r}
+expr_mat <- read_expression_table('data/example_intensity_data_subset.csv')
+knitr::kable(head(expr_mat[c(1:5)]))
+```
+
+
+## 3. Formatting Column Names 
+
+The column names of the metadata file contain various delimiters, including "."
+and "_". Standardize this by implementing the function `period_to_underscore` to
+properly replace all instances of "." with "_" in a string. Using a functional
+programming paradigm, apply this function to each column name in the metadata
+`tibble` and replace the column names.
+
+**Hint:** there are several possible solutions to this problem. Feel free to 
+Google possible ways to manipulate strings in `R`. One possible way is to use
+regular expressions and the `stringr` library. 
+```{r}
+colnames(metadata) <-
+  lapply(colnames(metadata), period_to_underscore)
+colnames(metadata)
+```
+
+
+
+
+## 4. Renaming and Selecting Columns of interest
+
+Using `dplyr` renaming and selecting to columns of interest is very straight
+forward. Implement the `rename_and_select` function to rename and select columns
+as the specified columns. Return the head of the newly formatted and subsetted
+`tibble`. 
+
+**Columns to rename**:
+
+1. "Age_at_diagnosis" to "Age"
+2. "SixSubtypesClassification" to "Subtype"
+3. "normalizationcombatbatch" to "Batch"
+
+**Columns to select**: "Sex", "Age", "TNM_Stage", "Tumor_Location",
+"geo_accession", "KRAS_Mutation", "Subtype", "Batch"
+
+```{r}
+selected_metadata <- rename_and_select(metadata)
+colnames(selected_metadata)
+```
+
+## Creating New Columns using `dplyr::mutate`
+There are often times when we may wish to create new columns in our data based
+off of values in previously existing columns. Implement the `stage_as_factor`
+function to create a new `Stage` column where each integer value in the original
+`TNM_Stage` column is prefixed by "stage". Ensure the the column is stored as a
+factor variable.
+
+```{r}
+selected_metadata <- stage_as_factor(selected_metadata)
+selected_metadata$Stage
+```
+
+## 5. Average Age by Sex
+
+Often times we'll want to calculate summary statistics for different groups.
+Implement the `mean_age_by_sex` function to properly filter your metadata tibble
+using a specified sex (possible values for this dataset are "M" and "F").
+Calculate the average age for both subject categories.
+
+```{r}
+male_age <-  mean_age_by_sex(selected_metadata, "M")
+female_age <-  mean_age_by_sex(selected_metadata, "F")
+print(paste0("The average male age is: ", round(male_age, digits=2)))
+print(paste0("The average female age is: ", round(female_age, digits=2)))
+```
+
+
+
+## 6. Grouping Data
+While filtering datasets by individual values is a viable method, we may often
+was to summarize our data across multiple groups. The `group_by` method from
+`dplyr` allows easy grouping of data `tibbles`, and the `summarise` function
+allows the easy calculations grouped statistics. Using the newly created `Stage`
+column, use both functions to find the average age of samples within each cancer
+stage, and count the number of co-occurrences between cancer subtype and cancer
+progression. Implement these methods in the `age_by_stage` and
+`subtype_stage_cross_tab` functions, respectively.
+
+```{r}
+age_by_stage(selected_metadata)
+```
+
+```{r, message=FALSE}
+subtype_stage_cross_tab(selected_metadata)
+```
+
+## 7. Selecting Interesting Features in Expression Data
+
+Often during analysis we will want to select interesting features or genes to
+explore more in-depth. For example, we may be interested in the most __highly__
+expressed genes, or perhaps the most __variable__ genes. Implement the function
+`summarize_expression()` to create a new `tibble` with average probe expression
+ (denoted "mean_exp").
+
+ **Hint:** There are several functions in base R that can be used for common
+ analysis steps. For example, `rowMeans()` or `colMeans`, can be used to 
+ calculate row or column-wise averages.
+
+ **Extra:** instead of simply returning mean probe expression, re-work
+ `summarize_expression()` to also return row _variability_ by first calculating
+ row-wise variability across all samples, and adding the column to the
+ returned `tibble`. Denote the column as "variance". 
+
+```{r}
+ # Create a synthetic tibble
+  exprs <- tibble(
+    subject_id = c("A", "B"),
+    probe1 = c(1, 2),
+    probe2 = c(2, 7),
+    probe3 = c(3, 15)
+  )
+
+
+  result <- summarize_expression(exprs)
+
+  # # Check that result is a tibble
+  # expect_true(is_tibble(result), info = "The returned result is not a tibble. Ensure your function returns a tibble.")
+  # 
+  # # Check that result has the expected columns
+  # expect_identical(names(result), c("mean_exp", "variance", "probe"), info = "The returned tibble does not have the expected column names.")
+  # 
+  # # Check number of rows
+  # expect_equal(nrow(result), 3, info = "Mismatch in the number of rows of the result compared to the number of columns in the expression matrix.")
+
+  # Check values in mean_exp column
+  values_mean <- c(1.5, 4.5, 9)
+  names_mean <- c('probe1', 'probe2', 'probe3')
+  test_means <- setNames(values_mean, names_mean)
+  # expect_identical(result %>% pull(mean_exp), test_means, info = "Mismatch between the expected means and the means in the mean_exp column.")
+
+  # Check values in variance column
+  values_var <- c(0.5, 12.5, 72)
+  names_var <- c('probe1', 'probe2', 'probe3')
+  test_var <- setNames(values_var, names_var)
+  # expect_identical(result %>% pull(variance), test_var, info = "Mismatch between the expected variances and the variances in the variance column.")
+
+  
+  
+```
+
+```{r}
+test_var
+```
+
+
+
+```{r}
+summarized <- summarize_expression_2(expr_mat)
+knitr::kable(head(summarized))
+```
+
+Using `dplyr::top_n` and `dplyr::arrange`, report the top ten mostly highly
+expressed probes, as well as the top ten most variable.
+
+```{r}
+highest_exp <- dplyr::top_n(summarized, 10, mean_exp) %>%
+  dplyr::arrange(dplyr::desc(mean_exp))
+print(paste0("The most highly expressed probes are ", paste(highest_exp$probe, collapse=', ')))
+
+if (c('variance') %in% colnames(summarized)) {
+  most_variable <- dplyr::top_n(summarized, 10, variance) %>%
+  dplyr::arrange(dplyr::desc(variance))
+  print(paste0("The most variable probes are ", paste(most_variable$probe, collapse=',')))
+}
+
+```
+
+## 8. Re-using Functions to Save Time and to Modularize Code
+
+If you looked into the samples present in the sample metadata, as well as the
+expression matrix, you may have realized not all samples in the expression data
+are found in the metadata. First, subset the metadata file to only include
+samples found in the expression matrix. Next, using our previously defined
+functions, calculate the same summary statistics we calculated previously (i.e.
+average age by sex, age of samples by cancer progression, and finally the stage
+and cancer subtype co-occurrences).
+```{r, message=FALSE}
+sub_meta <-
+  dplyr::filter(selected_metadata, geo_accession %in% expr_mat$subject_id)
+
+print(paste0("The average male age is: ", round(mean_age_by_sex(sub_meta, "M"), digits=2)))
+print(paste0("The average female age is: ", round(mean_age_by_sex(sub_meta, "F"), digits=2)))
+print(age_by_stage(sub_meta))
+subtype_stage_cross_tab(sub_meta)
+```
+
